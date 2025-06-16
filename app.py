@@ -34,7 +34,7 @@ def setup_gsheet():
     return sheet.sheet1
 
 # Input preferensi pengguna
-st.sidebar.header("🧭 Isi Preferensi Kamu")
+st.sidebar.header("🧭 aIsi Preferensi Kamu")
 nama_pengguna = st.sidebar.text_input("Nama Anda:")
 selected_categories = st.sidebar.multiselect("Pilih Kategori Wisata Favorit:", options=places_df['category'].dropna().unique(), default=None)
 max_budget = st.sidebar.number_input("Berapa budget kamu (Rp)?", min_value=0, value=300000, step=50000)
