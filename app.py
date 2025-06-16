@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import random
 from itertools import cycle
+import csv
+import os
 
 # Load data tempat wisata
 places_df = pd.read_csv("tourism_with_id.csv")
@@ -20,6 +22,20 @@ st.markdown("Bantu kamu memilih destinasi terbaik di Bandung berdasarkan prefere
 # Session state untuk menyimpan itinerary yang sedang aktif
 if "itinerary" not in st.session_state:
     st.session_state.itinerary = {}
+
+# Fungsi untuk mendapatkan user_id baru (auto increment)
+def get_next_user_id():
+    filename = "tourism_rating.csv"
+    if not os.path.exists(filename):
+        return 1
+    try:
+        df = pd.read_csv(filename)
+        if "user_id" not in df.columns:
+            df.columns = ["user_id", "place_id", "rating"]
+        df["user_id"] = pd.to_numeric(df["user_id"], errors="coerce")
+        return int(df["user_id"].max()) + 1 if not df.empty else 1
+    except Exception:
+        return 1
 
 # Input preferensi pengguna
 st.sidebar.header("🧭 Isi Preferensi Kamu")
@@ -113,5 +129,12 @@ if st.session_state.itinerary:
 
     if st.button("✅ Kirim Rating"):
         st.success("Terima kasih atas penilaianmu!")
-        for place, rate in rating_data:
-            st.write(f"{place}: {rate:.1f} ⭐")
+        user_id = get_next_user_id()
+        with open('tourism_rating.csv', mode='a', newline='') as file:
+            writer = csv.writer(file)
+            for nama, rating in rating_data:
+                match = places_df[places_df['place_name'] == nama]['place_id']
+                place_id = int(match.iloc[0]) if not match.empty else -1
+                if place_id != -1:
+                    writer.writerow([user_id, place_id, rating])
+                    st.write(f"{nama}: {rating:.1f} ⭐ (disimpan dengan User ID {user_id})")
