@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import random
 from itertools import cycle
-import csv
-import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from gspread_dataframe import set_with_dataframe
+import io
 
 # Load data tempat wisata
 places_df = pd.read_csv("tourism_with_id.csv")
@@ -23,19 +25,14 @@ st.markdown("Bantu kamu memilih destinasi terbaik di Bandung berdasarkan prefere
 if "itinerary" not in st.session_state:
     st.session_state.itinerary = {}
 
-# Fungsi untuk mendapatkan user_id baru (auto increment)
-def get_next_user_id():
-    filename = "tourism_rating.csv"
-    if not os.path.exists(filename):
-        return 1
-    try:
-        df = pd.read_csv(filename)
-        if "user_id" not in df.columns:
-            df.columns = ["user_id", "place_id", "rating"]
-        df["user_id"] = pd.to_numeric(df["user_id"], errors="coerce")
-        return int(df["user_id"].max()) + 1 if not df.empty else 1
-    except Exception:
-        return 1
+# Fungsi koneksi ke Google Sheets
+@st.cache_resource
+def setup_gsheet():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name("reliable-plasma-437208-g3-87a9070a0e82.json", scope)
+    client = gspread.authorize(creds)
+    sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1zJv9sNtE41B1sDWst_i2PbXgmtE3Be-X4IHtd0vta1Q/edit#gid=0")
+    return sheet.sheet1
 
 # Input preferensi pengguna
 st.sidebar.header("🧭 Isi Preferensi Kamu")
@@ -129,12 +126,28 @@ if st.session_state.itinerary:
 
     if st.button("✅ Kirim Rating"):
         st.success("Terima kasih atas penilaianmu!")
-        user_id = get_next_user_id()
-        with open('tourism_rating.csv', mode='a', newline='') as file:
-            writer = csv.writer(file)
+        sheet = setup_gsheet()
+
+        # Baca isi Google Sheet sebagai CSV
+        csv_raw = "\n".join([",".join(row) for row in sheet.get_all_values()])
+        existing = pd.read_csv(io.StringIO(csv_raw))
+        existing.columns = existing.columns.str.strip().str.lower()
+
+        if not {'user_id', 'place_id', 'place_ratings'}.issubset(set(existing.columns)):
+            st.error("❌ Kolom header di Google Sheet tidak sesuai. Harus: user_id, place_id, place_ratings")
+        else:
+            existing["user_id"] = pd.to_numeric(existing["user_id"], errors="coerce")
+            user_id = existing["user_id"].max() + 1 if not existing.empty else 1
+
+            new_rows = []
             for nama, rating in rating_data:
                 match = places_df[places_df['place_name'] == nama]['place_id']
                 place_id = int(match.iloc[0]) if not match.empty else -1
                 if place_id != -1:
-                    writer.writerow([user_id, place_id, rating])
-                    st.write(f"{nama}: {rating:.1f} ⭐ (disimpan dengan User ID {user_id})")
+                    new_rows.append({"user_id": user_id, "place_id": place_id, "place_ratings": rating})
+                    st.write(f"{nama}: {rating:.1f} ⭐ (disimpan ke Google Sheet)")
+
+            if new_rows:
+                updated = pd.concat([existing, pd.DataFrame(new_rows)], ignore_index=True)
+                sheet.clear()
+                set_with_dataframe(sheet, updated)
