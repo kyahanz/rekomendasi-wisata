@@ -3,7 +3,7 @@ import pandas as pd
 import random
 from itertools import cycle
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2 import service_account
 from gspread_dataframe import set_with_dataframe
 import io
 
@@ -29,7 +29,7 @@ if "itinerary" not in st.session_state:
 @st.cache_resource
 def setup_gsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("reliable-plasma-437208-g3-87a9070a0e82.json", scope)
+    creds = service_account.Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=scope)
     client = gspread.authorize(creds)
     sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1zJv9sNtE41B1sDWst_i2PbXgmtE3Be-X4IHtd0vta1Q/edit#gid=0")
     return sheet.sheet1
